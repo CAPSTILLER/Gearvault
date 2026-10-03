@@ -1,0 +1,1317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gear Vault Control Terminal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg-deep: #08090c;
+      --panel-bg: #101319;
+      --panel-border: #232a38;
+      --accent: #f59e0b;
+      --accent-glow: rgba(245, 158, 11, 0.65);
+      --accent-dark: #451a03;
+      --accent-core: #fde68a;
+      --text-main: #e2e8f0;
+      --text-muted: #7b889b;
+      --bezel-dark: #1b1e26;
+      --bezel-light: #373e4f;
+      --green-active: #00ff88;
+      --green-glow: rgba(0, 255, 136, 0.5);
+      --red-alert: #ff3344;
+      --red-glow: rgba(255, 51, 68, 0.6);
+      --cyan-accent: #00e5ff;
+      --gold-border: #d97706;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-deep);
+      background-image: 
+        radial-gradient(circle at 50% 15%, rgba(245, 158, 11, 0.09) 0%, transparent 60%),
+        repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.25) 0px, rgba(0, 0, 0, 0.25) 1px, transparent 1px, transparent 2px);
+      color: var(--text-main);
+      font-family: 'Chakra Petch', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 24px 16px;
+    }
+
+    .app-viewport {
+      width: 100%;
+      max-width: 680px;
+      position: relative;
+    }
+
+    .hud-chassis {
+      width: 100%;
+      background: linear-gradient(180deg, #181d26 0%, #0d1017 100%);
+      border: 2px solid var(--panel-border);
+      border-radius: 18px;
+      box-shadow: 
+        0 24px 60px rgba(0, 0, 0, 0.85),
+        inset 0 1px 0 rgba(255, 255, 255, 0.1),
+        inset 0 0 30px rgba(0, 0, 0, 0.8);
+      position: relative;
+      overflow: hidden;
+      padding: 26px;
+    }
+
+    .edge-spark-canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 25;
+      border-radius: 18px;
+    }
+
+    .screw {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background: radial-gradient(circle, #556075 0%, #202633 80%, #0d1017 100%);
+      border-radius: 50%;
+      border: 1px solid #11141a;
+      box-shadow: inset 0 1px 2px rgba(255,255,255,0.3), 0 1px 2px rgba(0,0,0,0.8);
+      z-index: 30;
+    }
+    .screw::after {
+      content: '';
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 8px;
+      height: 1.5px;
+      background: #11141a;
+      transform: translate(-50%, -50%) rotate(45deg);
+    }
+    .screw.tl { top: 12px; left: 12px; }
+    .screw.tr { top: 12px; right: 12px; }
+    .screw.bl { bottom: 12px; left: 12px; }
+    .screw.br { bottom: 12px; right: 12px; }
+
+    /* Top Hub Nav */
+    .hub-nav-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #090c12;
+      border: 1px solid #1c2230;
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin-bottom: 20px;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .active-cluster-pill {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--accent);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .badge-base {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      padding: 2px 7px;
+      border-radius: 4px;
+      background: rgba(0, 229, 255, 0.15);
+      border: 1px solid var(--cyan-accent);
+      color: var(--cyan-accent);
+    }
+
+    /* Emergency Bezel Button */
+    .emergency-wrapper {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      margin-bottom: 22px;
+    }
+
+    .emergency-bezel {
+      width: 140px;
+      height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(circle, #251e10 0%, #151006 60%, #090603 100%);
+      border: 3.5px dashed var(--gold-border);
+      box-shadow: 
+        0 0 0 3px #120e05,
+        0 0 20px var(--accent-glow),
+        inset 0 2px 4px rgba(255, 220, 100, 0.3),
+        0 8px 24px rgba(0, 0, 0, 0.9);
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.25s ease;
+    }
+
+    .emergency-bezel:hover {
+      box-shadow: 
+        0 0 0 3px #120e05,
+        0 0 30px var(--accent-glow),
+        0 10px 30px rgba(0, 0, 0, 0.95);
+    }
+
+    .emergency-bezel:active {
+      transform: scale(0.96);
+    }
+
+    .emergency-bezel.is-paused {
+      border-color: var(--red-alert);
+      box-shadow: 0 0 25px var(--red-glow), 0 0 0 3px #1f0508;
+    }
+
+    .rim-text-svg {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+
+    .embroidered-text {
+      font-family: 'Chakra Petch', sans-serif;
+      font-weight: 700;
+      font-size: 11px;
+      letter-spacing: 2px;
+      fill: #fbbf24;
+      text-shadow: 0 0 4px rgba(245, 158, 11, 0.8);
+    }
+
+    .embroidered-text.sub {
+      font-size: 9px;
+      fill: #b45309;
+      letter-spacing: 1.5px;
+    }
+
+    .emergency-dome {
+      width: 84px;
+      height: 84px;
+      border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #fde68a 0%, #f59e0b 45%, #92400e 85%, #451a03 100%);
+      box-shadow: 
+        0 0 18px var(--accent-glow),
+        inset 0 3px 6px rgba(255, 255, 255, 0.6),
+        inset 0 -4px 8px rgba(0, 0, 0, 0.8),
+        0 6px 14px rgba(0, 0, 0, 0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border: 2px solid #fef3c7;
+      position: relative;
+      z-index: 2;
+      transition: all 0.25s ease;
+    }
+
+    .emergency-bezel.is-paused .emergency-dome {
+      background: radial-gradient(circle at 35% 35%, #ff99a8 0%, #ff3344 45%, #880011 85%, #440008 100%);
+      border-color: #ffccd3;
+      box-shadow: 0 0 22px var(--red-glow);
+    }
+
+    .digital-clock-led {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+      background: #000;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      letter-spacing: 1px;
+      box-shadow: inset 0 0 8px rgba(0, 0, 0, 0.9);
+      text-shadow: 0 0 6px rgba(255, 255, 255, 0.8);
+      max-width: 72px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .dome-sublabel {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.55rem;
+      font-weight: 700;
+      color: rgba(255, 255, 255, 0.9);
+      letter-spacing: 1px;
+      margin-top: 3px;
+      text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+    }
+
+    /* Panel Header */
+    .panel-header {
+      border-bottom: 2px solid var(--panel-border);
+      padding-bottom: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .title-area h1 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: #ffffff;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .title-area h1 .accent {
+      color: var(--accent);
+      text-shadow: 0 0 10px var(--accent-glow);
+    }
+
+    .title-area p {
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+      margin-top: 3px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      border-radius: 6px;
+      font-size: 0.7rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-weight: 700;
+      letter-spacing: 1px;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      background: rgba(245, 158, 11, 0.08);
+      color: #fbbf24;
+      cursor: pointer;
+    }
+
+    .status-badge.connected {
+      border-color: rgba(0, 255, 136, 0.5);
+      background: rgba(0, 255, 136, 0.1);
+      color: #00ff88;
+    }
+
+    .status-badge.admin-cold {
+      border-color: rgba(255, 204, 0, 0.6);
+      background: rgba(255, 204, 0, 0.12);
+      color: #ffcc00;
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: blink 2s infinite ease-in-out;
+    }
+    .status-badge.connected .status-dot {
+      background: var(--green-active);
+      box-shadow: 0 0 8px var(--green-active);
+    }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    /* Metrics Row */
+    .metrics-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    .metric-card {
+      background: #11151e;
+      border: 1px solid #1e2533;
+      border-radius: 8px;
+      padding: 12px 8px;
+      text-align: center;
+    }
+
+    .metric-label {
+      font-size: 0.65rem;
+      color: var(--text-muted);
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 4px;
+    }
+
+    .metric-val {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .metric-val.green {
+      color: #00ff88;
+      text-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
+    }
+    .metric-val.gold {
+      color: #fbbf24;
+      text-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+    }
+    .metric-val.red {
+      color: #ff4455;
+      text-shadow: 0 0 8px rgba(255, 68, 85, 0.4);
+    }
+
+    /* Main Tab Navigation */
+    .nav-tab-bar {
+      display: flex;
+      gap: 6px;
+      background: #090c12;
+      border: 1px solid #1c2230;
+      border-radius: 8px;
+      padding: 4px;
+      margin-bottom: 18px;
+      overflow-x: auto;
+    }
+
+    .nav-tab-btn {
+      flex: 1;
+      min-width: 90px;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      color: var(--text-muted);
+      font-family: 'Chakra Petch', sans-serif;
+      font-weight: 700;
+      font-size: 0.72rem;
+      letter-spacing: 1px;
+      padding: 8px 6px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      white-space: nowrap;
+      text-align: center;
+    }
+
+    .nav-tab-btn:hover {
+      color: #fff;
+    }
+
+    .nav-tab-btn.active {
+      background: linear-gradient(180deg, #d97706 0%, #78350f 100%);
+      color: #fff;
+      box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+    }
+
+    /* Tab Panes */
+    .tab-pane {
+      display: none;
+      background: #0f131a;
+      border: 1px solid #1e2533;
+      border-radius: 10px;
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+    .tab-pane.active {
+      display: block;
+    }
+
+    .section-title {
+      font-size: 0.75rem;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1a202c;
+      padding-bottom: 6px;
+    }
+
+    .data-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px dashed #1c2230;
+      font-size: 0.72rem;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .data-row:last-child {
+      border-bottom: none;
+    }
+
+    .data-label {
+      color: var(--text-muted);
+    }
+    .data-value {
+      color: #fff;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hud-input {
+      background: #090b10;
+      border: 1px solid #252e3f;
+      border-radius: 6px;
+      padding: 8px 12px;
+      color: #fff;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.75rem;
+      outline: none;
+      width: 100%;
+      margin-bottom: 10px;
+      transition: border-color 0.2s;
+    }
+    .hud-input:focus {
+      border-color: var(--cyan-accent);
+    }
+
+    .hud-btn {
+      background: linear-gradient(180deg, #242c3d 0%, #171d29 100%);
+      border: 1px solid #3d4a63;
+      border-radius: 6px;
+      padding: 8px 14px;
+      color: #ffffff;
+      font-family: 'Chakra Petch', sans-serif;
+      font-weight: 700;
+      font-size: 0.75rem;
+      letter-spacing: 1px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .hud-btn:hover {
+      background: #2f3a50;
+      border-color: #55688a;
+    }
+
+    .hud-btn.primary {
+      background: linear-gradient(180deg, #d97706 0%, #78350f 100%);
+      border-color: #fbbf24;
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.35);
+    }
+    .hud-btn.primary:hover {
+      background: linear-gradient(180deg, #f59e0b 0%, #92400e 100%);
+    }
+
+    .hud-btn.danger {
+      background: linear-gradient(180deg, #dc2626 0%, #7f1d1d 100%);
+      border-color: #ff6666;
+      box-shadow: 0 0 12px rgba(220, 38, 38, 0.35);
+    }
+    .hud-btn.danger:hover {
+      background: linear-gradient(180deg, #ef4444 0%, #991b1b 100%);
+    }
+
+    .hud-btn.cyan {
+      background: linear-gradient(180deg, #00b4d8 0%, #0077b6 100%);
+      border-color: #00e5ff;
+    }
+    .hud-btn.cyan:hover {
+      background: #00e5ff;
+      color: #000;
+      box-shadow: 0 0 14px rgba(0, 229, 255, 0.5);
+    }
+
+    .hud-copy-btn {
+      background: rgba(0, 229, 255, 0.12);
+      border: 1px solid var(--cyan-accent);
+      color: var(--cyan-accent);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .hud-copy-btn:hover {
+      background: var(--cyan-accent);
+      color: #000;
+      box-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+    }
+
+    .code-box-container {
+      background: #090c12;
+      border: 1px solid #1c2230;
+      border-radius: 8px;
+      padding: 12px;
+      margin: 10px 0;
+      text-align: left;
+    }
+    .code-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.70rem;
+      color: var(--text-muted);
+    }
+    .code-snippet {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.68rem;
+      color: #a5b4fc;
+      white-space: pre;
+      overflow-x: auto;
+      max-height: 180px;
+      padding: 8px;
+      background: #06070a;
+      border-radius: 6px;
+      border: 1px solid #131722;
+      user-select: text;
+    }
+
+    #hudToast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: #00e5ff;
+      color: #000;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.78rem;
+      font-weight: 700;
+      padding: 10px 20px;
+      border-radius: 8px;
+      box-shadow: 0 0 20px rgba(0, 229, 255, 0.8), 0 4px 12px rgba(0,0,0,0.8);
+      z-index: 99999;
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none;
+    }
+    #hudToast.show {
+      transform: translateX(-50%) translateY(0);
+      opacity: 1;
+    }
+
+    .feedback-box {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.70rem;
+      margin-top: 6px;
+      margin-bottom: 8px;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-viewport">
+    <div class="hud-chassis" id="hudChassis">
+      <canvas id="edgeSparkCanvas" class="edge-spark-canvas"></canvas>
+      <div class="screw tl"></div>
+      <div class="screw tr"></div>
+      <div class="screw bl"></div>
+      <div class="screw br"></div>
+
+      <!-- Top Nav -->
+      <div class="hub-nav-bar">
+        <div class="active-cluster-pill">
+          <span>⚙️</span>
+          <span>GEARVAULT V2 // ONCHAIN</span>
+        </div>
+        <div class="badge-base">BASE MAINNET // 8453</div>
+        <button id="btnRefresh" class="hud-copy-btn">🔄 REFRESH</button>
+      </div>
+
+      <!-- Standalone Big Bezel Button -->
+      <div class="emergency-wrapper">
+        <div class="emergency-bezel" id="emergencyBtn" title="GearVault Controller // Click to quick-check pause state">
+          <svg class="rim-text-svg" viewBox="0 0 200 200">
+            <defs>
+              <path id="rimTextPath" d="M 30,100 A 70,70 0 1,1 170,100" fill="none" />
+              <path id="rimTextPathBottom" d="M 170,100 A 70,70 0 1,1 30,100" fill="none" />
+            </defs>
+            <text class="embroidered-text">
+              <textPath href="#rimTextPath" startOffset="50%" text-anchor="middle">
+                ★ GEAR VAULT CONTROLLER ★
+              </textPath>
+            </text>
+            <text class="embroidered-text sub">
+              <textPath href="#rimTextPathBottom" startOffset="50%" text-anchor="middle" id="rimTextSub">
+                CIRCUIT BREAKER // ONLINE
+              </textPath>
+            </text>
+          </svg>
+          <div class="emergency-dome" id="emergencyDome">
+            <div class="digital-clock-led" id="emergencyClockDisplay">0 GEAR</div>
+            <div class="dome-sublabel" id="emergencyModeLabel">ACTIVE</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-header">
+        <div class="title-area">
+          <h1><span class="accent">&#x2B24;</span> GEAR VAULT <span style="font-weight:400;color:var(--text-muted);">CONTROL</span></h1>
+          <p>
+            <span>BASE // 0x41ca...b3ab</span>
+            <button id="btnCopyVaultAddr" class="hud-copy-btn">📋 COPY ADDR</button>
+          </p>
+        </div>
+        <div class="status-badge" id="hudStatusBadge">
+          <div class="status-dot"></div>
+          <span id="hudStatusText">STANDBY</span>
+        </div>
+      </div>
+
+      <!-- Metrics Row -->
+      <div class="metrics-row">
+        <div class="metric-card">
+          <div class="metric-label">VAULT BALANCE</div>
+          <div class="metric-val gold" id="metricVaultBal">0 GEAR</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">DAILY REMAINING</div>
+          <div class="metric-val green" id="metricDailyRemaining">10,000 GEAR</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">BREAKER STATUS</div>
+          <div class="metric-val green" id="metricBreakerStatus">ACTIVE</div>
+        </div>
+      </div>
+
+      <!-- Navigation Tab Bar -->
+      <div class="nav-tab-bar">
+        <button class="nav-tab-btn active" onclick="switchTab('tabTelemetry')">1. TELEMETRY</button>
+        <button class="nav-tab-btn" onclick="switchTab('tabOperators')">2. OPERATORS</button>
+        <button class="nav-tab-btn" onclick="switchTab('tabLimits')">3. CAPS</button>
+        <button class="nav-tab-btn" onclick="switchTab('tabEmergency')">4. BREAKER</button>
+        <button class="nav-tab-btn" onclick="switchTab('tabOwnership')">5. OWNERSHIP</button>
+        <button class="nav-tab-btn" onclick="switchTab('tabSnippets')">6. SNIPPETS</button>
+      </div>
+
+      <!-- TAB 1: TELEMETRY -->
+      <div id="tabTelemetry" class="tab-pane active">
+        <div class="section-title">
+          <span>ONCHAIN VAULT STATE</span>
+          <span style="font-size:0.65rem;color:var(--text-muted);" id="lblLastSync">SYNC: LIVE</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Vault Address</span>
+          <span class="data-value">0x41ca...b3ab <button id="btnCopyVaultFull" class="hud-copy-btn">COPY</button></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">GEAR Token (6 Dec)</span>
+          <span class="data-value">0x5880...4bD1 <button id="btnCopyGearToken" class="hud-copy-btn">COPY</button></span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Ledger Admin (Cold)</span>
+          <span class="data-value" id="valOwner">0xD838...EAca</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Initial Operator (Hot)</span>
+          <span class="data-value">0x785c...563E</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Max Dispense Per Call</span>
+          <span class="data-value" id="valMaxDispense">50 GEAR</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Global Daily Cap</span>
+          <span class="data-value" id="valDailyCap">10,000 GEAR / Day</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Dispensed Today (UTC)</span>
+          <span class="data-value" id="valDispensedToday">0 GEAR</span>
+        </div>
+        <div class="data-row">
+          <span class="data-label">Per-Wallet Daily Cap</span>
+          <span class="data-value" id="valWalletCap">0 (OFF)</span>
+        </div>
+      </div>
+
+      <!-- TAB 2: OPERATORS -->
+      <div id="tabOperators" class="tab-pane">
+        <div class="section-title">
+          <span>OPERATOR MANAGEMENT</span>
+          <span style="font-size:0.65rem;color:var(--text-muted);">HOT WALLETS</span>
+        </div>
+        <p style="font-size:0.72rem;font-family:'JetBrains Mono';color:var(--text-muted);margin-bottom:12px;">
+          Hot wallets authorized to call <code>dispense()</code> for Caps Garage &amp; games.
+        </p>
+
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">CHECK OPERATOR STATUS</label>
+          <input type="text" id="inputCheckOp" class="hud-input" value="0x785cBE4a9eE034f79d0dC45cab9C0365F225563E" placeholder="0x..." />
+          <button id="btnCheckOp" class="hud-btn cyan" style="width:100%;justify-content:center;">VERIFY OPERATOR STATUS</button>
+          <div id="checkOpFeedback" class="feedback-box"></div>
+        </div>
+
+        <div style="border-top:1px dashed #1e2533;padding-top:12px;margin-bottom:16px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">AUTHORIZE NEW OPERATOR (LEDGER ADMIN)</label>
+          <input type="text" id="inputAuthOp" class="hud-input" placeholder="0x..." />
+          <button id="btnSubmitAuthOp" class="hud-btn primary" style="width:100%;justify-content:center;">➕ AUTHORIZE OPERATOR</button>
+          <div id="authOpFeedback" class="feedback-box"></div>
+        </div>
+
+        <div style="border-top:1px dashed #1e2533;padding-top:12px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">REVOKE OPERATOR (LEDGER ADMIN)</label>
+          <input type="text" id="inputRevokeOp" class="hud-input" placeholder="0x..." />
+          <button id="btnSubmitRevokeOp" class="hud-btn danger" style="width:100%;justify-content:center;">➖ REVOKE OPERATOR</button>
+          <div id="revokeOpFeedback" class="feedback-box"></div>
+        </div>
+      </div>
+
+      <!-- TAB 3: CAPS & LIMITS -->
+      <div id="tabLimits" class="tab-pane">
+        <div class="section-title">
+          <span>CAPS &amp; SAFETY LIMITS</span>
+          <span style="font-size:0.65rem;color:var(--text-muted);">LEDGER ADMIN</span>
+        </div>
+
+        <div style="margin-bottom:16px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">SET MAX DISPENSE PER CALL (GEAR)</label>
+          <input type="number" id="inputMaxDispense" class="hud-input" value="50" placeholder="e.g. 50" />
+          <button id="btnSetMaxDispense" class="hud-btn primary" style="width:100%;justify-content:center;">SET MAX DISPENSE</button>
+          <div id="maxDispenseFeedback" class="feedback-box"></div>
+        </div>
+
+        <div style="border-top:1px dashed #1e2533;padding-top:12px;margin-bottom:16px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">SET GLOBAL DAILY CAP (GEAR / UTC DAY)</label>
+          <input type="number" id="inputDailyCap" class="hud-input" value="10000" placeholder="e.g. 10000" />
+          <button id="btnSetDailyCap" class="hud-btn primary" style="width:100%;justify-content:center;">SET GLOBAL DAILY CAP</button>
+          <div id="dailyCapFeedback" class="feedback-box"></div>
+        </div>
+
+        <div style="border-top:1px dashed #1e2533;padding-top:12px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">SET PER-WALLET DAILY CAP (0 = OFF)</label>
+          <input type="number" id="inputPerWalletCap" class="hud-input" value="0" placeholder="0 = off" />
+          <button id="btnSetPerWalletCap" class="hud-btn primary" style="width:100%;justify-content:center;">SET PER-WALLET CAP</button>
+          <div id="perWalletFeedback" class="feedback-box"></div>
+        </div>
+      </div>
+
+      <!-- TAB 4: BREAKER & FUNDS -->
+      <div id="tabEmergency" class="tab-pane">
+        <div class="section-title">
+          <span>CIRCUIT BREAKER &amp; FUNDS</span>
+          <span style="font-size:0.65rem;color:var(--text-muted);">COLD STORAGE ONLY</span>
+        </div>
+
+        <div style="margin-bottom:18px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">CIRCUIT BREAKER TOGGLE</label>
+          <div style="display:flex;gap:10px;">
+            <button id="btnPauseVault" class="hud-btn danger" style="flex:1;justify-content:center;">🛑 PAUSE VAULT</button>
+            <button id="btnUnpauseVault" class="hud-btn primary" style="flex:1;justify-content:center;">▶️ UNPAUSE VAULT</button>
+          </div>
+          <div id="pauseFeedback" class="feedback-box"></div>
+        </div>
+
+        <div style="border-top:1px dashed #1e2533;padding-top:12px;margin-bottom:16px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">WITHDRAW GEAR TO TREASURY</label>
+          <input type="number" id="inputWithdrawAmount" class="hud-input" placeholder="Amount GEAR" />
+          <input type="text" id="inputWithdrawTo" class="hud-input" value="0xCF1ac98565DA846E8263604b49C1276Ed78A0981" placeholder="Recipient 0x..." />
+          <button id="btnWithdrawGear" class="hud-btn primary" style="width:100%;justify-content:center;">WITHDRAW GEAR</button>
+          <div id="withdrawFeedback" class="feedback-box"></div>
+        </div>
+
+        <div style="border-top:1px dashed #1e2533;padding-top:12px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">RESCUE STRAY TOKEN (NON-GEAR)</label>
+          <input type="text" id="inputRescueToken" class="hud-input" placeholder="Token Address 0x..." />
+          <input type="text" id="inputRescueRawAmount" class="hud-input" placeholder="Raw Amount (base units)" />
+          <input type="text" id="inputRescueTo" class="hud-input" value="0xD8382719b8fF90eE3Dd521B9d7c5dc23E8e4EAca" placeholder="Recipient 0x..." />
+          <button id="btnRescueToken" class="hud-btn danger" style="width:100%;justify-content:center;">RESCUE TOKEN</button>
+          <div id="rescueFeedback" class="feedback-box"></div>
+        </div>
+      </div>
+
+      <!-- TAB 5: OWNERSHIP -->
+      <div id="tabOwnership" class="tab-pane">
+        <div class="section-title">
+          <span>TWO-STEP OWNERSHIP HANDOVER</span>
+          <span style="font-size:0.65rem;color:var(--text-muted);">TYPO-PROOF</span>
+        </div>
+
+        <div class="data-row">
+          <span class="data-label">Active Owner</span>
+          <span class="data-value" id="valActiveOwnerDisplay">0xD838...EAca</span>
+        </div>
+        <div class="data-row" style="margin-bottom:14px;">
+          <span class="data-label">Pending Owner</span>
+          <span class="data-value" id="valPendingOwnerDisplay">None</span>
+        </div>
+
+        <div style="border-top:1px dashed #1e2533;padding-top:12px;margin-bottom:14px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">STEP 1: OFFER OWNERSHIP TO NEW ADDRESS</label>
+          <input type="text" id="inputNewOwner" class="hud-input" placeholder="New Owner 0x..." />
+          <button id="btnTransferOwnership" class="hud-btn primary" style="width:100%;justify-content:center;">INITIATE OWNERSHIP OFFER</button>
+          <div id="transferFeedback" class="feedback-box"></div>
+        </div>
+
+        <div style="border-top:1px dashed #1e2533;padding-top:12px;">
+          <label style="font-size:0.68rem;color:var(--text-muted);font-family:'JetBrains Mono';display:block;margin-bottom:4px;">STEP 2: CLAIM OFFER OR CANCEL</label>
+          <div style="display:flex;gap:10px;">
+            <button id="btnAcceptOwnership" class="hud-btn cyan" style="flex:1;justify-content:center;">ACCEPT OWNERSHIP</button>
+            <button id="btnCancelTransfer" class="hud-btn danger" style="flex:1;justify-content:center;">CANCEL OFFER</button>
+          </div>
+          <div id="claimFeedback" class="feedback-box"></div>
+        </div>
+      </div>
+
+      <!-- TAB 6: DEV & API SNIPPETS -->
+      <div id="tabSnippets" class="tab-pane">
+        <div class="section-title">
+          <span>DEVELOPER &amp; X402 SNIPPETS</span>
+          <span style="font-size:0.65rem;color:var(--text-muted);">1-CLICK INTEGRATION</span>
+        </div>
+        <p style="font-size:0.72rem;font-family:'JetBrains Mono';color:var(--text-muted);margin-bottom:12px;">
+          Code recipes for your Vercel functions, x402 endpoints, or game backends to dispense GEAR.
+        </p>
+
+        <div class="code-box-container">
+          <div class="code-header">
+            <span>VERCEL / X402 (Node.js + Viem)</span>
+            <button id="btnCopySnippetNode" class="hud-copy-btn">📋 COPY</button>
+          </div>
+          <div class="code-snippet" id="snippetNode">import { createWalletClient, http, parseAbi } from 'viem';
+import { privateKeyToAccount } from 'viem/accounts';
+import { base } from 'viem/chains';
+
+const account = privateKeyToAccount(process.env.OPERATOR_PRIVATE_KEY);
+const client = createWalletClient({
+  account,
+  chain: base,
+  transport: http(process.env.BASE_RPC_URL)
+});
+
+const VAULT_ADDRESS = '0x41ca72e18f7f96f8f2b7be524ac8346e06bcb3ab';
+const abi = parseAbi([
+  'function dispense(address recipient, uint256 amount) external'
+]);
+
+export async function payPlayer(playerAddress, gearAmount) {
+  // 1 GEAR = 1_000_000 base units (6 decimals)
+  const units = BigInt(Math.round(gearAmount * 1_000_000));
+  const txHash = await client.writeContract({
+    address: VAULT_ADDRESS,
+    abi,
+    functionName: 'dispense',
+    args: [playerAddress, units]
+  });
+  return txHash;
+}</div>
+        </div>
+
+        <div class="code-box-container">
+          <div class="code-header">
+            <span>GEAR VAULT ABI (JSON)</span>
+            <button id="btnCopySnippetAbi" class="hud-copy-btn">📋 COPY ABI</button>
+          </div>
+          <div class="code-snippet" id="snippetAbi"></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div id="hudToast">COPIED TO CLIPBOARD</div>
+
+  <script>
+    const VAULT_ADDRESS = "0x41ca72e18f7f96f8f2b7be524ac8346e06bcb3ab";
+    const GEAR_TOKEN = "0x5880cD05605A549f1DAb01a53ca61Ee559244bD1";
+    const INITIAL_OPERATOR = "0x785cBE4a9eE034f79d0dC45cab9C0365F225563E";
+
+    let vaultData = null;
+
+    function showToast(msg) {
+      const toast = document.getElementById("hudToast");
+      if (!toast) return;
+      toast.textContent = msg || "COPIED TO CLIPBOARD";
+      toast.classList.add("show");
+      setTimeout(() => toast.classList.remove("show"), 2200);
+    }
+
+    async function copyText(text, msg) {
+      try {
+        if (window.bankr && window.bankr.copy) {
+          await window.bankr.copy(text);
+        } else if (navigator && navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(text);
+        }
+        showToast(msg || "COPIED TO CLIPBOARD");
+      } catch (e) {
+        showToast("COPIED!");
+      }
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll(".tab-pane").forEach(el => el.classList.remove("active"));
+      document.querySelectorAll(".nav-tab-btn").forEach(el => el.classList.remove("active"));
+      const target = document.getElementById(tabId);
+      if (target) target.classList.add("active");
+      
+      const btns = Array.from(document.querySelectorAll(".nav-tab-btn"));
+      const tabNames = ['tabTelemetry', 'tabOperators', 'tabLimits', 'tabEmergency', 'tabOwnership', 'tabSnippets'];
+      const idx = tabNames.indexOf(tabId);
+      if (idx !== -1 && btns[idx]) btns[idx].classList.add("active");
+    }
+
+    async function syncVault() {
+      try {
+        let wallet = "";
+        if (window.bankr && window.bankr.ctx && window.bankr.ctx.walletAddress) {
+          wallet = window.bankr.ctx.walletAddress;
+        }
+        const res = await window.bankr.invokeScript("getVaultStatus", {
+          walletAddress: wallet,
+          checkAddress: document.getElementById("inputCheckOp").value.trim() || INITIAL_OPERATOR
+        });
+
+        if (res && res.ok) {
+          vaultData = res;
+          renderState(res);
+        }
+      } catch (err) {
+        console.error("sync error:", err);
+      }
+    }
+
+    function renderState(d) {
+      document.getElementById("metricVaultBal").textContent = d.vaultBalanceFormatted + " GEAR";
+      document.getElementById("metricDailyRemaining").textContent = d.remainingTodayFormatted + " GEAR";
+      
+      const breaker = document.getElementById("metricBreakerStatus");
+      const bezel = document.getElementById("emergencyBtn");
+      const domeText = document.getElementById("emergencyClockDisplay");
+      const domeLabel = document.getElementById("emergencyModeLabel");
+      const rimSub = document.getElementById("rimTextSub");
+
+      if (d.paused) {
+        breaker.textContent = "PAUSED";
+        breaker.className = "metric-val red";
+        bezel.classList.add("is-paused");
+        domeText.textContent = "HALT";
+        domeLabel.textContent = "PAUSED";
+        domeLabel.style.color = "#ff99a8";
+        rimSub.textContent = "CIRCUIT BREAKER // PAUSED";
+      } else {
+        breaker.textContent = "ACTIVE";
+        breaker.className = "metric-val green";
+        bezel.classList.remove("is-paused");
+        domeText.textContent = d.vaultBalanceFormatted + " G";
+        domeLabel.textContent = "ONLINE";
+        domeLabel.style.color = "#a3ffdc";
+        rimSub.textContent = "CIRCUIT BREAKER // ONLINE";
+      }
+
+      document.getElementById("valOwner").textContent = d.owner ? (d.owner.slice(0, 6) + "..." + d.owner.slice(-4)) : "0x...";
+      document.getElementById("valActiveOwnerDisplay").textContent = d.owner || "0x...";
+      document.getElementById("valPendingOwnerDisplay").textContent = (d.pendingOwner && d.pendingOwner !== "0x0000000000000000000000000000000000000000") ? d.pendingOwner : "None";
+
+      document.getElementById("valMaxDispense").textContent = d.maxDispenseFormatted + " GEAR";
+      document.getElementById("valDailyCap").textContent = d.dailyCapFormatted + " GEAR / Day";
+      document.getElementById("valDispensedToday").textContent = d.dispensedTodayFormatted + " GEAR";
+      document.getElementById("valWalletCap").textContent = d.perWalletDailyCapFormatted > 0 ? (d.perWalletDailyCapFormatted + " GEAR") : "0 (OFF)";
+
+      const badge = document.getElementById("hudStatusBadge");
+      const badgeText = document.getElementById("hudStatusText");
+
+      if (d.isOwner) {
+        badge.className = "status-badge admin-cold";
+        badgeText.textContent = "LEDGER ADMIN";
+      } else if (d.callerWallet) {
+        badge.className = "status-badge connected";
+        badgeText.textContent = "CONNECTED";
+      } else {
+        badge.className = "status-badge";
+        badgeText.textContent = "STANDBY";
+      }
+
+      const dTime = new Date(d.refreshedAt);
+      document.getElementById("lblLastSync").textContent = "SYNC: " + dTime.toLocaleTimeString();
+    }
+
+    async function executeVaultTx(action, payload, feedbackEl) {
+      if (!window.bankr || !window.bankr.invokeScript) return;
+      feedbackEl.style.color = "#00e5ff";
+      feedbackEl.textContent = "PREPARING TRANSACTION...";
+
+      try {
+        const res = await window.bankr.invokeScript("prepareVaultTx", { action, ...payload });
+        if (res && res.txBlob) {
+          await window.bankr.confirmTransaction(res.txBlob);
+          feedbackEl.style.color = "#00ff88";
+          feedbackEl.textContent = "TRANSACTION CONFIRMATION SENT TO CHAT!";
+        } else {
+          feedbackEl.style.color = "#ff4455";
+          feedbackEl.textContent = (res && res.error) || "PREPARATION FAILED";
+        }
+      } catch (err) {
+        feedbackEl.style.color = "#ff4455";
+        feedbackEl.textContent = "ERROR: " + err.message;
+      }
+    }
+
+    // Wiring Buttons
+    document.getElementById("btnRefresh").addEventListener("click", syncVault);
+    document.getElementById("btnCopyVaultAddr").addEventListener("click", () => copyText(VAULT_ADDRESS, "VAULT ADDRESS COPIED!"));
+    document.getElementById("btnCopyVaultFull").addEventListener("click", () => copyText(VAULT_ADDRESS, "VAULT ADDRESS COPIED!"));
+    document.getElementById("btnCopyGearToken").addEventListener("click", () => copyText(GEAR_TOKEN, "GEAR TOKEN ADDRESS COPIED!"));
+
+    document.getElementById("emergencyBtn").addEventListener("click", () => {
+      switchTab("tabEmergency");
+    });
+
+    document.getElementById("btnCheckOp").addEventListener("click", async () => {
+      const addr = document.getElementById("inputCheckOp").value.trim();
+      const fb = document.getElementById("checkOpFeedback");
+      if (!addr) return;
+      fb.style.color = "#00e5ff";
+      fb.textContent = "CHECKING OPERATOR STATUS...";
+      try {
+        const res = await window.bankr.invokeScript("getVaultStatus", { checkAddress: addr });
+        if (res && res.isCheckAddressOperator) {
+          fb.style.color = "#00ff88";
+          fb.textContent = "VERIFIED: ADDRESS IS AUTHORIZED OPERATOR";
+        } else {
+          fb.style.color = "#ff4455";
+          fb.textContent = "NOT AUTHORIZED: ADDRESS IS NOT AN OPERATOR";
+        }
+      } catch (e) {
+        fb.style.color = "#ff4455";
+        fb.textContent = "ERROR: " + e.message;
+      }
+    });
+
+    document.getElementById("btnSubmitAuthOp").addEventListener("click", () => {
+      const operator = document.getElementById("inputAuthOp").value.trim();
+      executeVaultTx("authorizeOperator", { operator }, document.getElementById("authOpFeedback"));
+    });
+
+    document.getElementById("btnSubmitRevokeOp").addEventListener("click", () => {
+      const operator = document.getElementById("inputRevokeOp").value.trim();
+      executeVaultTx("revokeOperator", { operator }, document.getElementById("revokeOpFeedback"));
+    });
+
+    document.getElementById("btnSetMaxDispense").addEventListener("click", () => {
+      const amountGears = document.getElementById("inputMaxDispense").value;
+      executeVaultTx("setMaxDispense", { amountGears }, document.getElementById("maxDispenseFeedback"));
+    });
+
+    document.getElementById("btnSetDailyCap").addEventListener("click", () => {
+      const amountGears = document.getElementById("inputDailyCap").value;
+      executeVaultTx("setDailyCap", { amountGears }, document.getElementById("dailyCapFeedback"));
+    });
+
+    document.getElementById("btnSetPerWalletCap").addEventListener("click", () => {
+      const amountGears = document.getElementById("inputPerWalletCap").value;
+      executeVaultTx("setPerWalletDailyCap", { amountGears }, document.getElementById("perWalletFeedback"));
+    });
+
+    document.getElementById("btnPauseVault").addEventListener("click", () => {
+      executeVaultTx("setPaused", { paused: true }, document.getElementById("pauseFeedback"));
+    });
+
+    document.getElementById("btnUnpauseVault").addEventListener("click", () => {
+      executeVaultTx("setPaused", { paused: false }, document.getElementById("pauseFeedback"));
+    });
+
+    document.getElementById("btnWithdrawGear").addEventListener("click", () => {
+      const amountGears = document.getElementById("inputWithdrawAmount").value;
+      const to = document.getElementById("inputWithdrawTo").value.trim();
+      executeVaultTx("withdrawGear", { amountGears, to }, document.getElementById("withdrawFeedback"));
+    });
+
+    document.getElementById("btnRescueToken").addEventListener("click", () => {
+      const token = document.getElementById("inputRescueToken").value.trim();
+      const rawAmount = document.getElementById("inputRescueRawAmount").value.trim();
+      const to = document.getElementById("inputRescueTo").value.trim();
+      executeVaultTx("rescueToken", { token, rawAmount, to }, document.getElementById("rescueFeedback"));
+    });
+
+    document.getElementById("btnTransferOwnership").addEventListener("click", () => {
+      const newOwner = document.getElementById("inputNewOwner").value.trim();
+      executeVaultTx("transferOwnership", { newOwner }, document.getElementById("transferFeedback"));
+    });
+
+    document.getElementById("btnAcceptOwnership").addEventListener("click", () => {
+      executeVaultTx("acceptOwnership", {}, document.getElementById("claimFeedback"));
+    });
+
+    document.getElementById("btnCancelTransfer").addEventListener("click", () => {
+      executeVaultTx("cancelOwnershipTransfer", {}, document.getElementById("claimFeedback"));
+    });
+
+    document.getElementById("btnCopySnippetNode").addEventListener("click", () => {
+      copyText(document.getElementById("snippetNode").textContent, "NODE.JS SNIPPET COPIED!");
+    });
+    document.getElementById("btnCopySnippetAbi").addEventListener("click", () => {
+      copyText(document.getElementById("snippetAbi").textContent, "ABI JSON COPIED!");
+    });
+
+    // Populate ABI snippet
+    const abiObj = [
+      { name: "dispense", type: "function", stateMutability: "nonpayable", inputs: [{ name: "recipient", type: "address" }, { name: "amount", type: "uint256" }], outputs: [] },
+      { name: "authorizeOperator", type: "function", stateMutability: "nonpayable", inputs: [{ name: "operator", type: "address" }], outputs: [] },
+      { name: "revokeOperator", type: "function", stateMutability: "nonpayable", inputs: [{ name: "operator", type: "address" }], outputs: [] },
+      { name: "setMaxDispense", type: "function", stateMutability: "nonpayable", inputs: [{ name: "newLimit", type: "uint256" }], outputs: [] },
+      { name: "setDailyCap", type: "function", stateMutability: "nonpayable", inputs: [{ name: "newCap", type: "uint256" }], outputs: [] },
+      { name: "setPerWalletDailyCap", type: "function", stateMutability: "nonpayable", inputs: [{ name: "newCap", type: "uint256" }], outputs: [] },
+      { name: "setPaused", type: "function", stateMutability: "nonpayable", inputs: [{ name: "_paused", type: "bool" }], outputs: [] },
+      { name: "withdrawGear", type: "function", stateMutability: "nonpayable", inputs: [{ name: "amount", type: "uint256" }, { name: "to", type: "address" }], outputs: [] },
+      { name: "rescueToken", type: "function", stateMutability: "nonpayable", inputs: [{ name: "token", type: "address" }, { name: "amount", type: "uint256" }, { name: "to", type: "address" }], outputs: [] },
+      { name: "transferOwnership", type: "function", stateMutability: "nonpayable", inputs: [{ name: "newOwner", type: "address" }], outputs: [] },
+      { name: "acceptOwnership", type: "function", stateMutability: "nonpayable", inputs: [], outputs: [] },
+      { name: "cancelOwnershipTransfer", type: "function", stateMutability: "nonpayable", inputs: [], outputs: [] },
+      { name: "vaultBalance", type: "function", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+      { name: "remainingToday", type: "function", stateMutability: "view", inputs: [], outputs: [{ name: "", type: "uint256" }] },
+      { name: "isOperator", type: "function", stateMutability: "view", inputs: [{ name: "caller", type: "address" }], outputs: [{ name: "", type: "bool" }] }
+    ];
+    document.getElementById("snippetAbi").textContent = JSON.stringify(abiObj, null, 2);
+
+    // Spark Physics
+    const sparkCanvas = document.getElementById("edgeSparkCanvas");
+    const sparkCtx = sparkCanvas ? sparkCanvas.getContext("2d") : null;
+    const chassis = document.getElementById("hudChassis");
+    let sparks = [];
+
+    class Spark {
+      constructor(dist, speed, hue) {
+        this.dist = dist;
+        this.speed = speed;
+        this.hue = hue;
+        this.history = [];
+      }
+    }
+
+    function getGeom(w, h) {
+      const inset = 4;
+      const pw = w - 2 * inset;
+      const ph = h - 2 * inset;
+      const pr = 16;
+      const lTop = pw - 2 * pr;
+      const lArc = 0.5 * Math.PI * pr;
+      const lSide = ph - 2 * pr;
+      const total = 2 * lTop + 2 * lSide + 4 * lArc;
+      return { pw, ph, pr, inset, lTop, lArc, lSide, total };
+    }
+
+    function getPoint(dist, geom) {
+      let d = dist % geom.total;
+      if (d < 0) d += geom.total;
+      if (d <= geom.lTop) return { x: geom.inset + geom.pr + d, y: geom.inset };
+      d -= geom.lTop;
+      if (d <= geom.lArc) {
+        const t = -Math.PI / 2 + d / geom.pr;
+        return { x: geom.inset + geom.pw - geom.pr + geom.pr * Math.cos(t), y: geom.inset + geom.pr + geom.pr * Math.sin(t) };
+      }
+      d -= geom.lArc;
+      if (d <= geom.lSide) return { x: geom.inset + geom.pw, y: geom.inset + geom.pr + d };
+      d -= geom.lSide;
+      if (d <= geom.lArc) {
+        const t = d / geom.pr;
+        return { x: geom.inset + geom.pw - geom.pr + geom.pr * Math.cos(t), y: geom.inset + geom.ph - geom.pr + geom.pr * Math.sin(t) };
+      }
+      d -= geom.lArc;
+      if (d <= geom.lTop) return { x: geom.inset + geom.pw - geom.pr - d, y: geom.inset + geom.ph };
+      d -= geom.lTop;
+      if (d <= geom.lArc) {
+        const t = Math.PI / 2 + d / geom.pr;
+        return { x: geom.inset + geom.pr + geom.pr * Math.cos(t), y: geom.inset + geom.ph - geom.pr + geom.pr * Math.sin(t) };
+      }
+      d -= geom.lArc;
+      if (d <= geom.lSide) return { x: geom.inset, y: geom.inset + geom.ph - geom.pr - d };
+      d -= geom.lSide;
+      const t = Math.PI + d / geom.pr;
+      return { x: geom.inset + geom.pr + geom.pr * Math.cos(t), y: geom.inset + geom.pr + geom.pr * Math.sin(t) };
+    }
+
+    function resizeCanvas() {
+      if (!sparkCanvas || !chassis) return;
+      const r = chassis.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      sparkCanvas.width = r.width * dpr;
+      sparkCanvas.height = r.height * dpr;
+      if (sparkCtx) sparkCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+    window.addEventListener("resize", resizeCanvas);
+
+    function initSparks() {
+      resizeCanvas();
+      const geom = getGeom(chassis.clientWidth, chassis.clientHeight);
+      sparks = [
+        new Spark(0, 2.6, 42),
+        new Spark(geom.total * 0.33, 2.6, 140),
+        new Spark(geom.total * 0.66, 2.6, 190)
+      ];
+
+      function loop() {
+        if (sparkCtx && chassis) {
+          const w = chassis.clientWidth;
+          const h = chassis.clientHeight;
+          sparkCtx.clearRect(0, 0, w, h);
+          const g = getGeom(w, h);
+
+          for (const sp of sparks) {
+            sp.dist = (sp.dist + sp.speed) % g.total;
+            const pt = getPoint(sp.dist, g);
+            sp.history.unshift({ x: pt.x, y: pt.y });
+            if (sp.history.length > 12) sp.history.pop();
+
+            for (let j = 0; j < sp.history.length; j++) {
+              const hpt = sp.history[j];
+              const ratio = 1 - j / sp.history.length;
+              sparkCtx.beginPath();
+              sparkCtx.arc(hpt.x, hpt.y, 2 * ratio + 0.5, 0, Math.PI * 2);
+              sparkCtx.fillStyle = `hsla(${sp.hue}, 100%, 65%, ${ratio * 0.65})`;
+              sparkCtx.fill();
+            }
+
+            sparkCtx.beginPath();
+            sparkCtx.arc(pt.x, pt.y, 3, 0, Math.PI * 2);
+            sparkCtx.fillStyle = "#ffffff";
+            sparkCtx.shadowColor = `hsl(${sp.hue}, 100%, 70%)`;
+            sparkCtx.shadowBlur = 8;
+            sparkCtx.fill();
+            sparkCtx.shadowBlur = 0;
+          }
+        }
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+    }
+
+    initSparks();
+
+    if (window.bankr) {
+      window.bankr.on("ready", syncVault);
+      syncVault();
+    }
+  </script>
+</body>
+</html>
