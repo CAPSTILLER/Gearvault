@@ -945,8 +945,17 @@ export async function payPlayer(playerAddress, gearAmount) {
     const VAULT_ADDRESS = "0x41ca72e18f7f96f8f2b7be524ac8346e06bcb3ab";
     const GEAR_TOKEN = "0x5880cD05605A549f1DAb01a53ca61Ee559244bD1";
     const INITIAL_OPERATOR = "0x785cBE4a9eE034f79d0dC45cab9C0365F225563E";
+    const BASE_CHAIN_ID_HEX = "0x2105"; // 8453
+    const BASE_CHAIN_ID_DEC = 8453;
+
+    const RPC_ENDPOINTS = [
+      "https://mainnet.base.org",
+      "https://base-rpc.publicnode.com",
+      "https://1rpc.io/base"
+    ];
 
     let vaultData = null;
+    let connectedWallet = null;
 
     function showToast(msg) {
       const toast = document.getElementById("hudToast");
@@ -981,21 +990,203 @@ export async function payPlayer(playerAddress, gearAmount) {
       if (idx !== -1 && btns[idx]) btns[idx].classList.add("active");
     }
 
+    // Direct Base JSON-RPC fallback
+    async function ethCall(data) {
+      for (const rpc of RPC_ENDPOINTS) {
+        try {
+          const res = await fetch(rpc, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              id: Date.now(),
+              method: "eth_call",
+              params: [{ to: VAULT_ADDRESS, data }, "latest"]
+            })
+          });
+          const json = await res.json();
+          if (json && json.result && json.result !== "0x") return json.result;
+        } catch (e) {
+          // try next rpc
+        }
+      }
+      throw new Error("Unable to reach Base RPC nodes");
+    }
+
+    function padAddress(addr) {
+      return addr.toLowerCase().replace("0x", "").padStart(64, "0");
+    }
+
+    function padUint(num) {
+      return BigInt(num).toString(16).padStart(64, "0");
+    }
+
+    function parseAddress(hex) {
+      if (!hex || hex === "0x") return "0x0000000000000000000000000000000000000000";
+      return "0x" + hex.slice(-40);
+    }
+
+    function parseUint(hex) {
+      if (!hex || hex === "0x") return 0n;
+      return BigInt(hex);
+    }
+
+    // Web3 Wallet Connection for Vercel/Browser
+    async function connectWallet() {
+      if (typeof window.ethereum === "undefined") {
+        showToast("NO WEB3 WALLET DETECTED");
+        return null;
+      }
+      try {
+        const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
+        if (accounts && accounts.length > 0) {
+          connectedWallet = accounts[0].toLowerCase();
+          await ensureBaseNetwork();
+          syncVault();
+          return connectedWallet;
+        }
+      } catch (err) {
+        console.error("Wallet connection failed:", err);
+      }
+      return null;
+    }
+
+    async function ensureBaseNetwork() {
+      if (!window.ethereum) return;
+      try {
+        const currentChainId = await window.ethereum.request({ method: "eth_chainId" });
+        if (currentChainId !== BASE_CHAIN_ID_HEX && parseInt(currentChainId, 16) !== BASE_CHAIN_ID_DEC) {
+          try {
+            await window.ethereum.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: BASE_CHAIN_ID_HEX }]
+            });
+          } catch (switchError) {
+            // Error 4902 indicates chain is not added to wallet
+            if (switchError.code === 4902) {
+              await window.ethereum.request({
+                method: "wallet_addEthereumChain",
+                params: [{
+                  chainId: BASE_CHAIN_ID_HEX,
+                  chainName: "Base",
+                  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+                  rpcUrls: ["https://mainnet.base.org"],
+                  blockExplorerUrls: ["https://basescan.org"]
+                }]
+              });
+            }
+          }
+        }
+      } catch (e) {
+        console.warn("Network switch check error:", e);
+      }
+    }
+
     async function syncVault() {
       try {
-        let wallet = "";
+        let caller = "";
         if (window.bankr && window.bankr.ctx && window.bankr.ctx.walletAddress) {
-          wallet = window.bankr.ctx.walletAddress;
+          caller = window.bankr.ctx.walletAddress.toLowerCase();
+        } else if (connectedWallet) {
+          caller = connectedWallet;
+        } else if (window.ethereum && window.ethereum.selectedAddress) {
+          caller = window.ethereum.selectedAddress.toLowerCase();
         }
-        const res = await window.bankr.invokeScript("getVaultStatus", {
-          walletAddress: wallet,
-          checkAddress: document.getElementById("inputCheckOp").value.trim() || INITIAL_OPERATOR
-        });
 
-        if (res && res.ok) {
-          vaultData = res;
-          renderState(res);
+        const checkAddrInput = document.getElementById("inputCheckOp");
+        const checkAddr = (checkAddrInput ? checkAddrInput.value.trim() : "") || INITIAL_OPERATOR;
+
+        // Mode 1: If inside Bankr terminal with invokeScript
+        if (window.bankr && window.bankr.invokeScript) {
+          try {
+            const res = await window.bankr.invokeScript("getVaultStatus", {
+              walletAddress: caller,
+              checkAddress: checkAddr
+            });
+            if (res && res.ok) {
+              vaultData = res;
+              renderState(res);
+              return;
+            }
+          } catch (scriptErr) {
+            console.warn("bankr.invokeScript failed, falling back to direct RPC:", scriptErr);
+          }
         }
+
+        // Mode 2: Direct on-chain Base JSON-RPC (Standalone for Vercel / Web)
+        const [
+          ownerHex,
+          pendingOwnerHex,
+          gearTokenHex,
+          maxDispenseHex,
+          dailyCapHex,
+          perWalletDailyCapHex,
+          pausedHex,
+          vaultBalanceHex,
+          dispensedTodayHex,
+          remainingTodayHex
+        ] = await Promise.all([
+          ethCall("0x8da5cb5b"), // owner()
+          ethCall("0xe30c3978"), // pendingOwner()
+          ethCall("0x49a3218d"), // gearToken()
+          ethCall("0x0725bc10"), // maxDispense()
+          ethCall("0xeb339391"), // dailyCap()
+          ethCall("0x37257775"), // perWalletDailyCap()
+          ethCall("0x5c975abb"), // paused()
+          ethCall("0x0bf6cc08"), // vaultBalance()
+          ethCall("0x04ac67b9"), // dispensedToday()
+          ethCall("0xfc3c5515")  // remainingToday()
+        ]);
+
+        let isOp = false;
+        if (checkAddr && /^0x[a-fA-F0-9]{40}$/.test(checkAddr)) {
+          try {
+            const isOpHex = await ethCall("0x6d70f7ae" + padAddress(checkAddr));
+            isOp = Boolean(parseUint(isOpHex));
+          } catch (e) {}
+        }
+
+        const owner = parseAddress(ownerHex);
+        const pendingOwner = parseAddress(pendingOwnerHex);
+        const maxDispense = parseUint(maxDispenseHex);
+        const dailyCap = parseUint(dailyCapHex);
+        const perWalletDailyCap = parseUint(perWalletDailyCapHex);
+        const paused = Boolean(parseUint(pausedHex));
+        const vaultBalance = parseUint(vaultBalanceHex);
+        const dispensedToday = parseUint(dispensedTodayHex);
+        const remainingToday = parseUint(remainingTodayHex);
+
+        const isOwner = Boolean(caller && owner && caller === owner.toLowerCase());
+        const isPending = Boolean(caller && pendingOwner && caller === pendingOwner.toLowerCase());
+
+        const res = {
+          ok: true,
+          vaultAddress: VAULT_ADDRESS,
+          gearToken: parseAddress(gearTokenHex),
+          owner,
+          pendingOwner,
+          maxDispense: String(maxDispense),
+          maxDispenseFormatted: Number(maxDispense) / 1e6,
+          dailyCap: String(dailyCap),
+          dailyCapFormatted: Number(dailyCap) / 1e6,
+          perWalletDailyCap: String(perWalletDailyCap),
+          perWalletDailyCapFormatted: Number(perWalletDailyCap) / 1e6,
+          paused,
+          vaultBalance: String(vaultBalance),
+          vaultBalanceFormatted: Number(vaultBalance) / 1e6,
+          dispensedToday: String(dispensedToday),
+          dispensedTodayFormatted: Number(dispensedToday) / 1e6,
+          remainingToday: String(remainingToday),
+          remainingTodayFormatted: Number(remainingToday) / 1e6,
+          isCheckAddressOperator: isOp,
+          callerWallet: caller,
+          isOwner,
+          isPending,
+          refreshedAt: Date.now()
+        };
+
+        vaultData = res;
+        renderState(res);
       } catch (err) {
         console.error("sync error:", err);
       }
@@ -1046,7 +1237,10 @@ export async function payPlayer(playerAddress, gearAmount) {
         badgeText.textContent = "LEDGER ADMIN";
       } else if (d.callerWallet) {
         badge.className = "status-badge connected";
-        badgeText.textContent = "CONNECTED";
+        badgeText.textContent = d.callerWallet.slice(0, 6) + "..." + d.callerWallet.slice(-4);
+      } else if (typeof window.ethereum !== "undefined") {
+        badge.className = "status-badge";
+        badgeText.textContent = "CONNECT WALLET";
       } else {
         badge.className = "status-badge";
         badgeText.textContent = "STANDBY";
@@ -1056,29 +1250,127 @@ export async function payPlayer(playerAddress, gearAmount) {
       document.getElementById("lblLastSync").textContent = "SYNC: " + dTime.toLocaleTimeString();
     }
 
+    // Helper to generate transaction calldata
+    function encodeActionData(action, payload) {
+      if (action === "authorizeOperator") {
+        const op = String(payload.operator || "").trim();
+        if (!/^0x[a-fA-F0-9]{40}$/.test(op)) throw new Error("Invalid operator address");
+        return "0x959b8c3f" + padAddress(op);
+      } else if (action === "revokeOperator") {
+        const op = String(payload.operator || "").trim();
+        if (!/^0x[a-fA-F0-9]{40}$/.test(op)) throw new Error("Invalid operator address");
+        return "0xfad8b32a" + padAddress(op);
+      } else if (action === "setMaxDispense") {
+        const tokens = Number(payload.amountGears || payload.amount || 0);
+        const units = BigInt(Math.round(tokens * 1e6));
+        return "0xea3d6cd7" + padUint(units);
+      } else if (action === "setDailyCap") {
+        const tokens = Number(payload.amountGears || payload.amount || 0);
+        const units = BigInt(Math.round(tokens * 1e6));
+        return "0x0840a44a" + padUint(units);
+      } else if (action === "setPerWalletDailyCap") {
+        const tokens = Number(payload.amountGears || payload.amount || 0);
+        const units = BigInt(Math.round(tokens * 1e6));
+        return "0x54ddc595" + padUint(units);
+      } else if (action === "setPaused") {
+        const p = Boolean(payload.paused !== undefined ? payload.paused : true);
+        return "0x16c38b3c" + (p ? "1" : "0").padStart(64, "0");
+      } else if (action === "withdrawGear") {
+        const tokens = Number(payload.amountGears || payload.amount || 0);
+        const to = String(payload.to || "").trim();
+        if (!/^0x[a-fA-F0-9]{40}$/.test(to)) throw new Error("Invalid recipient address");
+        const units = BigInt(Math.round(tokens * 1e6));
+        return "0xf46617c4" + padUint(units) + padAddress(to);
+      } else if (action === "rescueToken") {
+        const token = String(payload.token || "").trim();
+        const to = String(payload.to || "").trim();
+        const rawAmount = BigInt(payload.rawAmount || "0");
+        if (!/^0x[a-fA-F0-9]{40}$/.test(token) || !/^0x[a-fA-F0-9]{40}$/.test(to)) throw new Error("Invalid address");
+        return "0xf8a67a62" + padAddress(token) + padUint(rawAmount) + padAddress(to);
+      } else if (action === "transferOwnership") {
+        const newOwner = String(payload.newOwner || "").trim();
+        if (!/^0x[a-fA-F0-9]{40}$/.test(newOwner)) throw new Error("Invalid new owner address");
+        return "0xf2fde38b" + padAddress(newOwner);
+      } else if (action === "acceptOwnership") {
+        return "0x79ba5097";
+      } else if (action === "cancelOwnershipTransfer") {
+        return "0x23452b9c";
+      }
+      throw new Error("Unknown action: " + action);
+    }
+
     async function executeVaultTx(action, payload, feedbackEl) {
-      if (!window.bankr || !window.bankr.invokeScript) return;
       feedbackEl.style.color = "#00e5ff";
       feedbackEl.textContent = "PREPARING TRANSACTION...";
 
-      try {
-        const res = await window.bankr.invokeScript("prepareVaultTx", { action, ...payload });
-        if (res && res.txBlob) {
-          await window.bankr.confirmTransaction(res.txBlob);
-          feedbackEl.style.color = "#00ff88";
-          feedbackEl.textContent = "TRANSACTION CONFIRMATION SENT TO CHAT!";
-        } else {
-          feedbackEl.style.color = "#ff4455";
-          feedbackEl.textContent = (res && res.error) || "PREPARATION FAILED";
+      // Mode 1: Bankr Terminal
+      if (window.bankr && window.bankr.invokeScript) {
+        try {
+          const res = await window.bankr.invokeScript("prepareVaultTx", { action, ...payload });
+          if (res && res.txBlob) {
+            await window.bankr.confirmTransaction(res.txBlob);
+            feedbackEl.style.color = "#00ff88";
+            feedbackEl.textContent = "TRANSACTION CONFIRMATION SENT TO CHAT!";
+            setTimeout(syncVault, 3500);
+            return;
+          } else {
+            feedbackEl.style.color = "#ff4455";
+            feedbackEl.textContent = (res && res.error) || "PREPARATION FAILED";
+            return;
+          }
+        } catch (err) {
+          console.warn("bankr tx prep error, falling back to window.ethereum:", err);
         }
-      } catch (err) {
-        feedbackEl.style.color = "#ff4455";
-        feedbackEl.textContent = "ERROR: " + err.message;
       }
+
+      // Mode 2: Browser Web3 Wallet (MetaMask, Rabby, Coinbase Wallet) for Vercel
+      if (typeof window.ethereum !== "undefined") {
+        try {
+          await ensureBaseNetwork();
+          let account = connectedWallet;
+          if (!account) {
+            account = await connectWallet();
+          }
+          if (!account) {
+            feedbackEl.style.color = "#fbbf24";
+            feedbackEl.textContent = "PLEASE CONNECT YOUR WALLET FIRST";
+            return;
+          }
+
+          const calldata = encodeActionData(action, payload);
+          feedbackEl.textContent = "PLEASE CONFIRM IN YOUR WALLET...";
+
+          const txHash = await window.ethereum.request({
+            method: "eth_sendTransaction",
+            params: [{
+              from: account,
+              to: VAULT_ADDRESS,
+              data: calldata
+            }]
+          });
+
+          feedbackEl.innerHTML = `<span style="color:#00ff88;">TX SENT: </span><a href="https://basescan.org/tx/${txHash}" target="_blank" style="color:#00e5ff;text-decoration:underline;">${txHash.slice(0, 10)}...${txHash.slice(-8)}</a>`;
+          setTimeout(syncVault, 4000);
+          return;
+        } catch (err) {
+          feedbackEl.style.color = "#ff4455";
+          feedbackEl.textContent = "ERROR: " + (err.message || err);
+          return;
+        }
+      }
+
+      feedbackEl.style.color = "#ff4455";
+      feedbackEl.textContent = "NO WEB3 WALLET FOUND. PLEASE INSTALL METAMASK OR RABBY.";
     }
 
     // Wiring Buttons
     document.getElementById("btnRefresh").addEventListener("click", syncVault);
+    document.getElementById("hudStatusBadge").addEventListener("click", () => {
+      if (typeof window.ethereum !== "undefined" && !connectedWallet) {
+        connectWallet();
+      }
+    });
+
     document.getElementById("btnCopyVaultAddr").addEventListener("click", () => copyText(VAULT_ADDRESS, "VAULT ADDRESS COPIED!"));
     document.getElementById("btnCopyVaultFull").addEventListener("click", () => copyText(VAULT_ADDRESS, "VAULT ADDRESS COPIED!"));
     document.getElementById("btnCopyGearToken").addEventListener("click", () => copyText(GEAR_TOKEN, "GEAR TOKEN ADDRESS COPIED!"));
@@ -1094,8 +1386,21 @@ export async function payPlayer(playerAddress, gearAmount) {
       fb.style.color = "#00e5ff";
       fb.textContent = "CHECKING OPERATOR STATUS...";
       try {
-        const res = await window.bankr.invokeScript("getVaultStatus", { checkAddress: addr });
-        if (res && res.isCheckAddressOperator) {
+        if (window.bankr && window.bankr.invokeScript) {
+          const res = await window.bankr.invokeScript("getVaultStatus", { checkAddress: addr });
+          if (res && res.isCheckAddressOperator) {
+            fb.style.color = "#00ff88";
+            fb.textContent = "VERIFIED: ADDRESS IS AUTHORIZED OPERATOR";
+            return;
+          } else {
+            fb.style.color = "#ff4455";
+            fb.textContent = "NOT AUTHORIZED: ADDRESS IS NOT AN OPERATOR";
+            return;
+          }
+        }
+        // Direct RPC check
+        const isOpHex = await ethCall("0x6d70f7ae" + padAddress(addr));
+        if (Boolean(parseUint(isOpHex))) {
           fb.style.color = "#00ff88";
           fb.textContent = "VERIFIED: ADDRESS IS AUTHORIZED OPERATOR";
         } else {
@@ -1308,9 +1613,30 @@ export async function payPlayer(playerAddress, gearAmount) {
 
     initSparks();
 
-    if (window.bankr) {
-      window.bankr.on("ready", syncVault);
+    // Universal Initialization
+    function initApp() {
       syncVault();
+      setInterval(syncVault, 10000); // 10s auto-refresh for fresh telemetry
+
+      if (window.bankr) {
+        window.bankr.on("ready", syncVault);
+      }
+
+      if (typeof window.ethereum !== "undefined") {
+        window.ethereum.on("accountsChanged", (accounts) => {
+          connectedWallet = accounts && accounts[0] ? accounts[0].toLowerCase() : null;
+          syncVault();
+        });
+        window.ethereum.on("chainChanged", () => {
+          syncVault();
+        });
+      }
+    }
+
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", initApp);
+    } else {
+      initApp();
     }
   </script>
 </body>
