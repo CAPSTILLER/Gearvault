@@ -1,0 +1,28 @@
+{
+  "slug": "gear-vault-control",
+  "title": "Gear Vault Control Terminal",
+  "description": "Dedicated control terminal for GearVault v2 on Base (0x41ca...b3ab) with live reserve telemetry, operator dispensing telemetry, caps management, circuit breaker toggle, and cold-wallet ownership handovers.",
+  "permissions": [
+    "read:chain",
+    "prepare:transaction",
+    "read:appdata",
+    "write:appdata"
+  ],
+  "tags": [
+    "gears",
+    "gaming",
+    "vault",
+    "base"
+  ],
+  "scripts": [
+    "getVaultStatus",
+    "prepareVaultTx"
+  ],
+  "contract": {
+    "address": "0x41ca72e18f7f96f8f2b7be524ac8346e06bcb3ab",
+    "chain": "base",
+    "gearToken": "0x5880cD05605A549f1DAb01a53ca61Ee559244bD1",
+    "owner": "0xD8382719b8fF90eE3Dd521B9d7c5dc23E8e4EAca",
+    "operator": "0x785cBE4a9eE034f79d0dC45cab9C0365F225563E"
+  }
+}
